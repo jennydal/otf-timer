@@ -2,16 +2,29 @@ import os
 import requests
 from google import genai
 
-# Route Reddit's RSS feed through a free public proxy to avoid GitHub Actions IP blocks
-proxy_url = "https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.reddit.com%2Fr%2Forangetheory%2Fsearch.rss%3Fq%3Dtitle%3A%2522Daily%2BWorkout%2522%26sort%3Dnew%26restrict_sr%3Don"
+# Use a strictly compliant Reddit API User-Agent to bypass datacenter blocks
+headers = {
+    "User-Agent": "script:otf-timer-generator:v1.0 (by /u/gym-automation-bot)"
+}
+url = 'https://www.reddit.com/r/orangetheory/search.json?q=title:"Daily Workout"&sort=new&restrict_sr=on'
 
-# Fetch and parse the JSON response from the proxy
-data = requests.get(proxy_url).json()
+print("Fetching latest workout from Reddit...")
+response = requests.get(url, headers=headers)
 
-# The proxy stores the post body in the 'description' field of the first item
-post_text = data['items'][0]['description']
+# Ensure we got a successful response before parsing
+if response.status_code != 200:
+    raise Exception(f"Reddit API refused the connection: {response.status_code} - {response.text}")
 
-# Initialize the Gemini client 
+data = response.json()
+
+# Safely extract the post body
+try:
+    post_text = data['data']['children'][0]['data']['selftext']
+    print("Successfully retrieved workout text!")
+except (KeyError, IndexError) as e:
+    raise Exception(f"Unexpected JSON structure from Reddit. The post might not exist yet. Error: {e}")
+
+# Initialize the Gemini client
 client = genai.Client()
 
 prompt = f"""
@@ -24,7 +37,7 @@ Workout Text:
 {post_text}
 """
 
-# Call the generation endpoint (ensure the model is set to 2.5)
+print("Generating timer JSON via Gemini...")
 response = client.models.generate_content(
     model="gemini-2.5-flash",
     contents=prompt
@@ -36,8 +49,11 @@ json_output = response.text.replace("```json", "").replace("```", "").strip()
 # Save the payload locally
 with open("today.seconds", "w") as f:
     f.write(json_output)
+print("Saved today.seconds locally.")
 
 # Ping the Pushcut Webhook to alert your phone
 pushcut_webhook = os.environ.get("PUSHCUT_WEBHOOK")
 if pushcut_webhook:
+    print("Pinging iOS Pushcut webhook...")
     requests.post(pushcut_webhook)
+    print("Webhook sent!")
