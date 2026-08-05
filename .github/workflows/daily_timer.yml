@@ -22,7 +22,6 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
-        # Install standard libraries and the official Google Gen AI SDK
         run: pip install requests google-genai
 
       - name: Run Generation Script
