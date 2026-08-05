@@ -1,35 +1,32 @@
 import os
 import requests
-import urllib.parse
 from google import genai
 
-print("Fetching latest workout via AllOrigins proxy...")
+print("Fetching latest workout via PullPush API...")
 
-# The target Reddit URL (URL-encoded to pass safely through the proxy)
-reddit_url = 'https://www.reddit.com/r/orangetheory/search.json?q=title:"Daily Workout"&sort=new&restrict_sr=on'
-encoded_url = urllib.parse.quote(reddit_url, safe='')
-
-# Route through AllOrigins to bypass Reddit's IP block on GitHub Actions
-proxy_url = f"https://api.allorigins.win/raw?url={encoded_url}"
+# Use the PullPush submission endpoint to search for the specific phrase within the subreddit
+url = 'https://api.pullpush.io/reddit/search/submission/?subreddit=orangetheory&q="Daily Workout"&sort=desc&size=1'
 
 # Use a standard browser User-Agent
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-response = requests.get(proxy_url, headers=headers)
+response = requests.get(url, headers=headers)
 
 if response.status_code != 200:
-    raise Exception(f"Proxy failed: {response.status_code} - {response.text}")
+    raise Exception(f"PullPush API failed: {response.status_code} - {response.text}")
 
 data = response.json()
 
-# Safely extract the post body
+# Safely extract the post body from the PullPush payload
 try:
-    post_text = data['data']['children'][0]['data']['selftext']
-    print("Successfully retrieved workout text!")
+    # PullPush returns an array of submissions in the 'data' key
+    post_text = data['data'][0]['selftext']
+    title = data['data'][0]['title']
+    print(f"Successfully retrieved: {title}")
 except (KeyError, IndexError) as e:
-    raise Exception(f"Unexpected JSON structure. Error: {e}")
+    raise Exception(f"Unexpected JSON structure from PullPush. The post might not exist yet. Error: {e}")
 
 # Initialize the Gemini client
 client = genai.Client()
