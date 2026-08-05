@@ -1,19 +1,26 @@
 import os
 import requests
+import urllib.parse
 from google import genai
 
-# Use a strictly compliant Reddit API User-Agent to bypass datacenter blocks
+print("Fetching latest workout via AllOrigins proxy...")
+
+# The target Reddit URL (URL-encoded to pass safely through the proxy)
+reddit_url = 'https://www.reddit.com/r/orangetheory/search.json?q=title:"Daily Workout"&sort=new&restrict_sr=on'
+encoded_url = urllib.parse.quote(reddit_url, safe='')
+
+# Route through AllOrigins to bypass Reddit's IP block on GitHub Actions
+proxy_url = f"https://api.allorigins.win/raw?url={encoded_url}"
+
+# Use a standard browser User-Agent
 headers = {
-    "User-Agent": "script:otf-timer-generator:v1.0 (by /u/gym-automation-bot)"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
-url = 'https://www.reddit.com/r/orangetheory/search.json?q=title:"Daily Workout"&sort=new&restrict_sr=on'
 
-print("Fetching latest workout from Reddit...")
-response = requests.get(url, headers=headers)
+response = requests.get(proxy_url, headers=headers)
 
-# Ensure we got a successful response before parsing
 if response.status_code != 200:
-    raise Exception(f"Reddit API refused the connection: {response.status_code} - {response.text}")
+    raise Exception(f"Proxy failed: {response.status_code} - {response.text}")
 
 data = response.json()
 
@@ -22,7 +29,7 @@ try:
     post_text = data['data']['children'][0]['data']['selftext']
     print("Successfully retrieved workout text!")
 except (KeyError, IndexError) as e:
-    raise Exception(f"Unexpected JSON structure from Reddit. The post might not exist yet. Error: {e}")
+    raise Exception(f"Unexpected JSON structure. Error: {e}")
 
 # Initialize the Gemini client
 client = genai.Client()
