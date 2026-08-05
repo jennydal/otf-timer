@@ -2,12 +2,10 @@ import os
 import requests
 from google import genai
 
-print("Fetching latest workout via PullPush API...")
+print("Fetching latest workout post via PullPush API...")
 
-# Use the PullPush submission endpoint to search for the specific phrase within the subreddit
+# STEP 1: Get the Daily Workout Submission
 url = 'https://api.pullpush.io/reddit/search/submission/?subreddit=orangetheory&q="Daily Workout"&sort=desc&size=1'
-
-# Use a standard browser User-Agent
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
@@ -15,20 +13,40 @@ headers = {
 response = requests.get(url, headers=headers)
 
 if response.status_code != 200:
-    raise Exception(f"PullPush API failed: {response.status_code} - {response.text}")
+    raise Exception(f"PullPush Submission API failed: {response.status_code}")
 
 data = response.json()
 
-# Safely extract the post body from the PullPush payload
 try:
-    # PullPush returns an array of submissions in the 'data' key
-    post_text = data['data'][0]['selftext']
+    # Extract the unique Reddit name ID (e.g., t3_1kq3kqy)
+    submission_name = data['data'][0]['name']
     title = data['data'][0]['title']
-    print(f"Successfully retrieved: {title}")
+    print(f"Found post: {title}")
 except (KeyError, IndexError) as e:
-    raise Exception(f"Unexpected JSON structure from PullPush. The post might not exist yet. Error: {e}")
+    raise Exception(f"Unexpected JSON structure. Post might not exist yet. Error: {e}")
 
-# Initialize the Gemini client
+# STEP 2: Fetch the comments for that specific submission
+print("Fetching comments to find the workout intel...")
+comment_url = f"https://api.pullpush.io/reddit/search/comment/?link_id={submission_name}"
+comment_response = requests.get(comment_url, headers=headers)
+
+if comment_response.status_code != 200:
+    raise Exception(f"PullPush Comment API failed: {comment_response.status_code}")
+
+comment_data = comment_response.json()
+comments = comment_data.get('data', [])
+
+if not comments:
+    raise Exception("No comments found on this post yet. Intel hasn't been posted.")
+
+# The actual workout intel is typically the longest comment on the thread. 
+# We sort comments by the length of their body text and grab the largest one.
+workout_comment = max(comments, key=lambda c: len(c.get('body', '')))
+post_text = workout_comment.get('body', '')
+
+print(f"Extracted workout intel (Length: {len(post_text)} characters).")
+
+# STEP 3: Initialize the Gemini client and generate JSON
 client = genai.Client()
 
 prompt = f"""
